@@ -195,7 +195,7 @@ typedef char __v16qi __attribute__((__vector_size__(16)));
 typedef long long __m128i_u
     __attribute__((__vector_size__(16), __aligned__(1)));
 
- LZ4_FORCE_INLINE void __DEFAULT_FN_ATTRS _mm_storeu_si128(__m128i_u *__p,
+LZ4_FORCE_INLINE void __DEFAULT_FN_ATTRS _mm_storeu_si128(__m128i_u *__p,
                                                            __m128i __b) {
   struct __storeu_si128 {
     __m128i_u __v;
@@ -204,7 +204,7 @@ typedef long long __m128i_u
 }
 
 
-static __inline__ __m128i __DEFAULT_FN_ATTRS
+LZ4_FORCE_INLINE  __m128i __DEFAULT_FN_ATTRS
 _mm_load_si128(__m128i const *__p) {
   return *__p;
 }
@@ -217,7 +217,7 @@ _mm_shuffle_epi8(__m128i __a, __m128i __b)
     return (__m128i)__builtin_ia32_pshufb128((__v16qi)__a, (__v16qi)__b);
 }
 
-static __inline__ __m128i __DEFAULT_FN_ATTRS
+LZ4_FORCE_INLINE  __m128i __DEFAULT_FN_ATTRS
 _mm_loadu_si128(__m128i_u const *__p) {
   struct __loadu_si128 {
     __m128i_u __v;
