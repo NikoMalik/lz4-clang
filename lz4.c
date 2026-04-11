@@ -530,6 +530,68 @@ LZ4_wildCopy32(void* dstPtr, const void* srcPtr, void* dstEnd)
     do { LZ4_memcpy(d,s,16); LZ4_memcpy(d+16,s+16,16); d+=32; s+=32; } while (d<e);
 }
 
+
+LZ4_FORCE_INLINE void copyOverlap16(BYTE* op, const BYTE** match_ptr, size_t offset)
+{
+    static const int shift1[16] = { 0, 1, 2, 1, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 };
+    static const int shift2[16] = { 0, 0, 0, 1, 0, -1, -2, -3, -4,  4,  4,  4,  4,  4,  4,  4 };
+    static const int shift3[16] = { 0, 0, 0,-1, 0, -2,  2,  1, 8, -1, -2, -3, -4, -5, -6, -7 };
+
+    const BYTE* match = *match_ptr;
+
+    op[0] = match[0];
+    op[1] = match[1];
+    op[2] = match[2];
+    op[3] = match[3];
+
+    match += shift1[offset];
+    LZ4_memcpy(op + 4, match, 4);
+
+    match += shift2[offset];
+    LZ4_memcpy(op + 8, match, 8);
+
+    match += shift3[offset];
+
+    *match_ptr = match;   
+}
+
+#ifdef __SSSE3__
+LZ4_FORCE_INLINE void copyOverlap16Shuffle(BYTE* op, const BYTE** match_ptr, size_t offset)
+{
+    static const uint8_t __attribute__((aligned(16))) masks[16][16] = {
+        {0,1,2,1,4,1,4,2,8,7,6,5,4,3,2,1}, /* offset 0 */
+        {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, /* 1 */
+        {0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1},
+        {0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0},
+        {0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3},
+        {0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0},
+        {0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3},
+        {0,1,2,3,4,5,6,0,1,2,3,4,5,6,0,1},
+        {0,1,2,3,4,5,6,7,0,1,2,3,4,5,6,7},
+        {0,1,2,3,4,5,6,7,8,0,1,2,3,4,5,6},
+        {0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5},
+        {0,1,2,3,4,5,6,7,8,9,10,0,1,2,3,4},
+        {0,1,2,3,4,5,6,7,8,9,10,11,0,1,2,3},
+        {0,1,2,3,4,5,6,7,8,9,10,11,12,0,1,2},
+        {0,1,2,3,4,5,6,7,8,9,10,11,12,13,0,1},
+        {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,0},
+    };
+
+    const BYTE* match = *match_ptr;
+
+    _mm_storeu_si128((__m128i*)op,
+        _mm_shuffle_epi8(
+            _mm_loadu_si128((const __m128i*)match),
+            _mm_load_si128((const __m128i*)masks[offset])
+        ));
+
+    *match_ptr = match + masks[offset][15];   
+}
+#else
+#   define copyOverlap16Shuffle(op, match_ptr, offset) copyOverlap16(op, match_ptr, offset)
+#endif
+
+
 /* LZ4_memcpy_using_offset()  presumes :
  * - dstEnd >= dstPtr + MINMATCH
  * - there is at least 12 bytes available to write after dstEnd */
@@ -537,6 +599,12 @@ LZ4_FORCE_INLINE void
 LZ4_memcpy_using_offset(BYTE* dstPtr, const BYTE* srcPtr, BYTE* dstEnd, const size_t offset)
 {
     BYTE v[8];
+
+		if (offset < 16) {
+        const BYTE* match = srcPtr;
+        copyOverlap16Shuffle(dstPtr, &match, offset);
+        return;
+    }
 
     assert(dstEnd >= dstPtr + MINMATCH);
 
