@@ -204,6 +204,13 @@ typedef long long __m128i_u
 }
 
 
+static __inline__ __m128i __DEFAULT_FN_ATTRS
+_mm_load_si128(__m128i const *__p) {
+  return *__p;
+}
+
+
+
 LZ4_FORCE_INLINE __m128i __DEFAULT_FN_ATTRS
 _mm_shuffle_epi8(__m128i __a, __m128i __b)
 {
@@ -640,10 +647,10 @@ LZ4_FORCE_INLINE void copyOverlap16Shuffle(BYTE* op, const BYTE** match_ptr, siz
 
     *match_ptr = match + masks[offset][15];   
 }
+
 #else
 #   define copyOverlap16Shuffle(op, match_ptr, offset) copyOverlap16(op, match_ptr, offset)
 #endif
-
 
 /* LZ4_memcpy_using_offset()  presumes :
  * - dstEnd >= dstPtr + MINMATCH
