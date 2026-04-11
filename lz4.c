@@ -1976,7 +1976,7 @@ LZ4_decompress_unsafe_generic(
  * @error (output) - error code.  Must be set to 0 before call.
 **/
 typedef size_t Rvl_t;
-static const Rvl_t rvl_error = (Rvl_t)(-1);
+static const Rvl_t rvl_error = LZ4_MAX_INPUT_SIZE + 1;
 LZ4_FORCE_INLINE Rvl_t
 read_variable_length(const BYTE** ip, const BYTE* ilimit,
                      int initial_check)
@@ -2093,12 +2093,11 @@ LZ4_decompress_generic(
 
             /* decode literal length */
             if (length == RUN_MASK) {
-                size_t const addl = read_variable_length(&ip, iend-RUN_MASK, 1);
-                if (addl == rvl_error) {
+				        length += read_variable_length(&ip, iend - RUN_MASK, 1);
+                if (length > LZ4_MAX_INPUT_SIZE) {
                     DEBUGLOG(6, "error reading long literal length");
                     goto _output_error;
                 }
-                length += addl;
                 if (unlikely((uptrval)(op)+length<(uptrval)(op))) { goto _output_error; } /* overflow detection */
                 if (unlikely((uptrval)(ip)+length<(uptrval)(ip))) { goto _output_error; } /* overflow detection */
 
@@ -2118,7 +2117,7 @@ LZ4_decompress_generic(
             }
 
 				    /* get matchlength */
-            length = token;
+            length = token + MINMATCH;
 
             /* get offset */
             offset = LZ4_readLE16(ip); ip+=2;
@@ -2128,13 +2127,12 @@ LZ4_decompress_generic(
 
             DEBUGLOG(7, "  match length token = %u (len==%u)", (unsigned)length, (unsigned)length+MINMATCH);
 
-            if (length == ML_MASK) {
+            if (length == (ML_MASK + MINMATCH)) {
                 size_t const addl = read_variable_length(&ip, iend - LASTLITERALS + 1, 0);
                 if (addl == rvl_error) {
                     DEBUGLOG(5, "error reading long match length");
                     goto _output_error;
                 }
-                length += MINMATCH;
 								length += addl;
                 DEBUGLOG(7, "  long match length == %u", (unsigned)length);
                 if (unlikely((uptrval)(op)+length<(uptrval)op)) { goto _output_error; } /* overflow detection */
@@ -2142,7 +2140,6 @@ LZ4_decompress_generic(
                     goto safe_match_copy;
                 }
             } else {
-                length += MINMATCH;
                 if (op + length >= oend - FASTLOOP_SAFE_DISTANCE) {
                     DEBUGLOG(7, "moving to safe_match_copy (ml==%u)", (unsigned)length);
                     goto safe_match_copy;
@@ -2241,21 +2238,21 @@ LZ4_decompress_generic(
 
                 /* The second stage: prepare for match copying, decode full info.
                  * If it doesn't work out, the info won't be wasted. */
-                length = token; /* match length */
+                length = token + MINMATCH; /* match length */
                 DEBUGLOG(7, "blockPos%6u: matchLength token = %u (len=%u)", (unsigned)(op-(BYTE*)dst), (unsigned)length, (unsigned)length + 4);
                 offset = LZ4_readLE16(ip); ip += 2;
                 match = op - offset;
                 assert(match <= op); /* check overflow */
 
                 /* Do not deal with overlapping matches. */
-                if ( (length != ML_MASK)
+                if ( (length != (ML_MASK + MINMATCH))
                   && (offset >= 8)
                   && (dict==withPrefix64k || match >= lowPrefix) ) {
                     /* Copy the match. */
                     LZ4_memcpy(op + 0, match + 0, 8);
                     LZ4_memcpy(op + 8, match + 8, 8);
                     LZ4_memcpy(op +16, match +16, 2);
-                    op += length + MINMATCH;
+                    op += length;
                     /* Both stages worked, load the next token. */
                     continue;
                 }
@@ -2267,9 +2264,8 @@ LZ4_decompress_generic(
 
             /* decode literal length */
             if (length == RUN_MASK) {
-                size_t const addl = read_variable_length(&ip, iend-RUN_MASK, 1);
-                if (addl == rvl_error) { goto _output_error; }
-                length += addl;
+		            length += read_variable_length(&ip, iend - RUN_MASK, 1);
+                if (length > LZ4_MAX_INPUT_SIZE) { goto _output_error; }
                 if (unlikely((uptrval)(op)+length<(uptrval)(op))) { goto _output_error; } /* overflow detection */
                 if (unlikely((uptrval)(ip)+length<(uptrval)(ip))) { goto _output_error; } /* overflow detection */
             }
@@ -2345,13 +2341,12 @@ LZ4_decompress_generic(
             DEBUGLOG(7, "blockPos%6u: matchLength token = %u", (unsigned)(op-(BYTE*)dst), (unsigned)length);
 
     _copy_match:
-            if (length == ML_MASK) {
+            if (length == (ML_MASK +MINMATCH)) {
                 size_t const addl = read_variable_length(&ip, iend - LASTLITERALS + 1, 0);
                 if (addl == rvl_error) { goto _output_error; }
                 length += addl;
                 if (unlikely((uptrval)(op)+length<(uptrval)op)) goto _output_error;   /* overflow detection */
             }
-            length += MINMATCH;
 
 #if LZ4_FAST_DEC_LOOP
         safe_match_copy:
