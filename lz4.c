@@ -84,6 +84,9 @@
 #  endif
 #endif
 
+#include <emmintrin.h>   /* SSE2 */
+#include <tmmintrin.h>   /* SSSE3  */
+
 /*
  * LZ4_FORCE_SW_BITCOUNT
  * Define this parameter if your target system or compiler does not support hardware bit count
