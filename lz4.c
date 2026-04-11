@@ -84,8 +84,9 @@
 #  endif
 #endif
 
-#include <emmintrin.h>   /* SSE2 */
-#include <tmmintrin.h>   /* SSSE3  */
+
+
+
 
 /*
  * LZ4_FORCE_SW_BITCOUNT
@@ -169,6 +170,55 @@
 #else
 #  define LZ4_FORCE_O2
 #endif
+
+
+/* Define the default attributes for the functions in this file. */
+#if defined(__EVEX512__) && !defined(__AVX10_1_512__)
+#define __DEFAULT_FN_ATTRS                                                     \
+  __attribute__((__always_inline__, __nodebug__,                               \
+                 __target__("ssse3,no-evex512"), __min_vector_width__(128)))
+#else
+#define __DEFAULT_FN_ATTRS                                                     \
+  __attribute__((__always_inline__, __nodebug__, __target__("ssse3"),          \
+                 __min_vector_width__(128)))
+#endif
+
+
+
+/* Types vectors */
+typedef long long __m128i __attribute__((__vector_size__(16), __aligned__(16)));
+typedef double __m128d_u __attribute__((__vector_size__(16), __aligned__(1)));
+typedef char __v16qi __attribute__((__vector_size__(16)));
+
+/* Vector functions */
+
+typedef long long __m128i_u
+    __attribute__((__vector_size__(16), __aligned__(1)));
+
+ LZ4_FORCE_INLINE void __DEFAULT_FN_ATTRS _mm_storeu_si128(__m128i_u *__p,
+                                                           __m128i __b) {
+  struct __storeu_si128 {
+    __m128i_u __v;
+  } __attribute__((__packed__, __may_alias__));
+  ((struct __storeu_si128 *)__p)->__v = __b;
+}
+
+
+LZ4_FORCE_INLINE __m128i __DEFAULT_FN_ATTRS
+_mm_shuffle_epi8(__m128i __a, __m128i __b)
+{
+    return (__m128i)__builtin_ia32_pshufb128((__v16qi)__a, (__v16qi)__b);
+}
+
+static __inline__ __m128i __DEFAULT_FN_ATTRS
+_mm_loadu_si128(__m128i_u const *__p) {
+  struct __loadu_si128 {
+    __m128i_u __v;
+  } __attribute__((__packed__, __may_alias__));
+  return ((const struct __loadu_si128 *)__p)->__v;
+}
+
+
 
 #if (defined(__GNUC__) && (__GNUC__ >= 3)) || (defined(__INTEL_COMPILER) && (__INTEL_COMPILER >= 800)) || defined(__clang__)
 #  define expect(expr,value)    (__builtin_expect ((expr),(value)) )
