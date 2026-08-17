@@ -172,6 +172,11 @@
 #endif
 
 
+/* x86 SSSE3 vector helpers. Compiled only where SSSE3 exists, other targets
+   (x86 baseline, aarch64, ...) use the NEON or scalar copyOverlap16 fallback,
+   selected below. Guarding the definitions keeps the file portable, clang would
+   otherwise reject __builtin_ia32_pshufb128 on non-x86 targets. */
+#ifdef __SSSE3__
 /* Define the default attributes for the functions in this file. */
 #if defined(__EVEX512__) && !defined(__AVX10_1_512__)
 #define __DEFAULT_FN_ATTRS                                                     \
@@ -224,6 +229,7 @@ _mm_loadu_si128(__m128i_u const *__p) {
   } __attribute__((__packed__, __may_alias__));
   return ((const struct __loadu_si128 *)__p)->__v;
 }
+#endif /* __SSSE3__ */
 
 
 
@@ -645,7 +651,39 @@ LZ4_FORCE_INLINE void copyOverlap16Shuffle(BYTE* op, const BYTE** match_ptr, siz
             _mm_load_si128((const __m128i*)masks[offset])
         ));
 
-    *match_ptr = match + masks[offset][15];   
+    *match_ptr = match + masks[offset][15];
+}
+
+#elif defined(__aarch64__) && defined(__ARM_NEON)
+#include <arm_neon.h>
+/* NEON boost, vqtbl1q_u8 is the AArch64 table lookup equivalent of pshufb */
+LZ4_FORCE_INLINE void copyOverlap16Shuffle(BYTE* op, const BYTE** match_ptr, size_t offset)
+{
+    static const uint8_t masks[16][16] = {
+        {0,1,2,1,4,1,4,2,8,7,6,5,4,3,2,1}, /* offset 0 */
+        {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, /* 1 */
+        {0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1},
+        {0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0},
+        {0,1,2,3,0,1,2,3,0,1,2,3,0,1,2,3},
+        {0,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0},
+        {0,1,2,3,4,5,0,1,2,3,4,5,0,1,2,3},
+        {0,1,2,3,4,5,6,0,1,2,3,4,5,6,0,1},
+        {0,1,2,3,4,5,6,7,0,1,2,3,4,5,6,7},
+        {0,1,2,3,4,5,6,7,8,0,1,2,3,4,5,6},
+        {0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5},
+        {0,1,2,3,4,5,6,7,8,9,10,0,1,2,3,4},
+        {0,1,2,3,4,5,6,7,8,9,10,11,0,1,2,3},
+        {0,1,2,3,4,5,6,7,8,9,10,11,12,0,1,2},
+        {0,1,2,3,4,5,6,7,8,9,10,11,12,13,0,1},
+        {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,0},
+    };
+
+    const BYTE* match = *match_ptr;
+    const uint8x16_t in = vld1q_u8(match);
+    const uint8x16_t idx = vld1q_u8(masks[offset]);
+    vst1q_u8(op, vqtbl1q_u8(in, idx));
+
+    *match_ptr = match + masks[offset][15];
 }
 
 #else
@@ -1544,8 +1582,8 @@ int LZ4_compress_fast_extState(void* state, const char* source, char* dest, int 
 int LZ4_compress_fast_extState_fastReset(void* state, const char* src, char* dst, int srcSize, int dstCapacity, int acceleration)
 {
     LZ4_stream_t_internal* const ctx = &((LZ4_stream_t*)state)->internal_donotuse;
-    if (acceleration < 1) acceleration = LZ4_ACCELERATION_DEFAULT;
-    if (acceleration > LZ4_ACCELERATION_MAX) acceleration = LZ4_ACCELERATION_MAX;
+    assert(acceleration > 1);
+		assert(acceleration < LZ4_ACCELERATION_MAX);
     assert(ctx != NULL);
 
     if (dstCapacity >= LZ4_compressBound(srcSize)) {
@@ -2953,4 +2991,6 @@ char* LZ4_slideInputBuffer (void* state)
 }
 
 #endif   /* LZ4_COMMONDEFS_ONLY */
+
+
 
