@@ -2500,6 +2500,13 @@ LZ4_decompress_generic(
                 ip += length; op = cpy;
             }
 
+            /* get matchlength : token was masked to the match nibble at loop
+             * head, add MINMATCH so it matches the fast loop / shortcut. Without
+             * this the fall-through path reached _copy_match with `length` still
+             * holding the literal length, corrupting every match whose literal
+             * run took the safe path (small highly-compressible blocks). */
+            length = token + MINMATCH;
+
             /* get offset */
             offset = LZ4_readLE16(ip); ip+=2;
             match = op - offset;
