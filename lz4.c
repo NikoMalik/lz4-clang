@@ -701,6 +701,13 @@ LZ4_memcpy_using_offset(BYTE* dstPtr, const BYTE* srcPtr, BYTE* dstEnd, const si
 		if (offset < 16) {
         const BYTE* match = srcPtr;
         copyOverlap16Shuffle(dstPtr, &match, offset);
+        if (dstPtr + 16 < dstEnd) {
+            static const BYTE period8[16] = { 8, 8, 8, 9, 8, 10, 12, 14, 8, 9, 10, 11, 12, 13, 14, 15 };
+            const size_t back = period8[offset];
+            BYTE* d = dstPtr + 16;
+            const BYTE* s = d - back;
+            do { LZ4_memcpy(d, s, 8); d += 8; s += 8; } while (d < dstEnd);
+        }
         return;
     }
 
